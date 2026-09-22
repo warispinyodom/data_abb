@@ -26,12 +26,12 @@
             <i class="bi bi-pencil-square"></i> กำลังแก้ไขไฟล์: {{ filename }}
         </div>
         <div class="card-body">
-            <form method="POST" action="/edit/{{ filename }}">
+            <form method="POST" action="{{ url_for('edit_file', filename=filename) }}">
                 <div class="mb-3">
                     <textarea class="form-control font-monospace" name="content" rows="10">{{ content }}</textarea>
                 </div>
                 <button type="submit" class="btn btn-success"><i class="bi bi-save"></i> บันทึกการแก้ไข</button>
-                <a href="/" class="btn btn-secondary"><i class="bi bi-x-circle"></i> ยกเลิก</a>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary"><i class="bi bi-x-circle"></i> ยกเลิก</a>
             </form>
         </div>
     </div>
@@ -67,9 +67,9 @@
                             <li class="list-group-item d-flex justify-content-between align-items-center p-3">
                                 <span class="fw-semibold"><i class="bi bi-file-text me-2 text-secondary"></i> {{ f }}</span>
                                 <div class="btn-group" role="group">
-                                    <a href="/dashboard/{{ f }}" class="btn btn-sm btn-info text-white" title="ดูตารางและกรองข้อมูล"><i class="bi bi-table"></i> Dashboard</a>
-                                    <a href="/edit/{{ f }}" class="btn btn-sm btn-warning" title="แก้ไขเนื้อหาดิบ"><i class="bi bi-pencil"></i></a>
-                                    <a href="/delete/{{ f }}" class="btn btn-sm btn-danger" onclick="return confirm('แน่ใจหรือไม่ที่จะลบไฟล์ {{ f }} ?');" title="ลบไฟล์"><i class="bi bi-trash"></i></a>
+                                    <a href="{{ url_for('dashboard', filename=f) }}" class="btn btn-sm btn-info text-white" title="ดูตารางและกรองข้อมูล"><i class="bi bi-table"></i> Dashboard</a>
+                                    <a href="{{ url_for('edit_file', filename=f) }}" class="btn btn-sm btn-warning" title="แก้ไขเนื้อหาดิบ"><i class="bi bi-pencil"></i></a>
+                                    <a href="{{ url_for('delete_file', filename=f) }}" class="btn btn-sm btn-danger" onclick="return confirm('แน่ใจหรือไม่ที่จะลบไฟล์ {{ f }} ?');" title="ลบไฟล์"><i class="bi bi-trash"></i></a>
                                 </div>
                             </li>
                         {% else %}

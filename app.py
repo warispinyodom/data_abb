@@ -52,7 +52,7 @@ def index():
     files = os.listdir(app.config['UPLOAD_FOLDER']) if os.path.exists(app.config['UPLOAD_FOLDER']) else []
     return render_template('index.html', files=files, edit_mode=False)
 
-@app.route('/edit/<filename>', methods=['GET', 'POST'])
+@app.route('/edit/<path:filename>', methods=['GET', 'POST'])
 def edit_file(filename):
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     
@@ -71,14 +71,14 @@ def edit_file(filename):
     files = os.listdir(app.config['UPLOAD_FOLDER'])
     return render_template('index.html', edit_mode=True, filename=filename, content=content, files=files)
 
-@app.route('/delete/<filename>')
+@app.route('/delete/<path:filename>')
 def delete_file(filename):
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     if os.path.exists(filepath):
         os.remove(filepath)
     return redirect(url_for('index'))
 
-@app.route('/dashboard/<filename>')
+@app.route('/dashboard/<path:filename>')
 def dashboard(filename):
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     
