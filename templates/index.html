@@ -19,6 +19,13 @@
         </div>
     </div>
 
+    {% if warning == 'storage' %}
+    <div class="alert alert-warning border-warning shadow-sm">
+        <strong>ไฟล์ไม่มีอยู่แล้ว:</strong> Vercel ไม่สามารถเก็บไฟล์ที่อัปโหลดไว้แบบถาวรบน disk ได้ เนื่องจากระบบเป็น serverless runtime
+        จึงอาจถูกลบโดยอัตโนมัติเมื่อ instance ถูกรีสตาร์ท กรุณาอัปโหลดไฟล์ใหม่อีกครั้ง
+    </div>
+    {% endif %}
+
     <!-- ส่วนของการแก้ไขไฟล์ -->
     {% if edit_mode %}
     <div class="card shadow-sm border-warning mb-4">

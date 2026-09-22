@@ -39,6 +39,7 @@ def filter_data(filepath, search_query=None):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    warning = request.args.get('warning')
     if request.method == 'POST':
         if 'file' not in request.files:
             return redirect(request.url)
@@ -50,7 +51,7 @@ def index():
     
     # อ่านไฟล์จาก /tmp/uploads
     files = os.listdir(app.config['UPLOAD_FOLDER']) if os.path.exists(app.config['UPLOAD_FOLDER']) else []
-    return render_template('index.html', files=files, edit_mode=False)
+    return render_template('index.html', files=files, edit_mode=False, warning=warning)
 
 @app.route('/edit/<path:filename>', methods=['GET', 'POST'])
 def edit_file(filename):
@@ -83,7 +84,7 @@ def dashboard(filename):
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     
     if not os.path.exists(filepath):
-        return "ไม่พบไฟล์ (ไฟล์อาจถูกลบไปแล้วโดยระบบของ Vercel)", 404
+        return redirect(url_for('index', warning='storage'))
         
     search_query = request.args.get('search', '').strip()
     data = filter_data(filepath, search_query)
