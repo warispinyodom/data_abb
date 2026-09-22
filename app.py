@@ -3,9 +3,6 @@ import os
 
 app = Flask(__name__)
 
-# กำหนดขนาดข้อมูลสูงสุดที่ส่งผ่าน Form/Upload ได้ (50 MB)
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
-
 # กำหนดตำแหน่งโฟลเดอร์ uploads บน Server
 UPLOAD_FOLDER = os.path.join(app.root_path, 'uploads')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -52,16 +49,39 @@ def index():
             return redirect(request.url)
         file = request.files['file']
         if file.filename != '':
+            # บันทึกไฟล์ลงดิสก์เครื่อง Server ตรงๆ
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
             file.save(filepath)
             return redirect(url_for('index'))
     
+    # อ่านรายชื่อไฟล์ทั้งหมดจากโฟลเดอร์ uploads
     files = sorted([f for f in os.listdir(app.config['UPLOAD_FOLDER']) if not f.startswith('.')])
-    return render_template('index.html', files=files)
+    return render_template('index.html', files=files, edit_mode=False)
+
+@app.route('/edit/<filename>', methods=['GET', 'POST'])
+def edit_file(filename):
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    
+    if request.method == 'POST':
+        content = request.form['content']
+        # เขียนแก้ไขข้อมูลลงไฟล์บน Server
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return redirect(url_for('index'))
+    
+    if not os.path.exists(filepath):
+        return redirect(url_for('index'))
+
+    with open(filepath, 'r', encoding='utf-8') as f:
+        content = f.read()
+        
+    files = sorted([f for f in os.listdir(app.config['UPLOAD_FOLDER']) if not f.startswith('.')])
+    return render_template('index.html', edit_mode=True, filename=filename, content=content, files=files)
 
 @app.route('/delete/<filename>')
 def delete_file(filename):
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    # ลบไฟล์ออกจากดิสก์ของ Server
     if os.path.exists(filepath):
         os.remove(filepath)
     return redirect(url_for('index'))
