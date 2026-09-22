@@ -3,48 +3,39 @@ import os
 
 app = Flask(__name__)
 
-UPLOAD_FOLDER = 'uploads'
+# เปลี่ยน UPLOAD_FOLDER ไปใช้ /tmp เพราะ Vercel อนุญาตให้เขียนไฟล์ชั่วคราวได้ที่นี่เท่านั้น
+UPLOAD_FOLDER = '/tmp/uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
+# สร้างโฟลเดอร์หากยังไม่มี
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-def filter_data(filepath, filters=None, limit=100):
-    headers = []
+def filter_data(filepath, search_query=None):
     data = []
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             lines = f.readlines()
             if lines:
-                # ใช้ Tab เป็นตัวแบ่งคอลัมน์
                 headers = lines[0].strip().split('\t')
-                
                 for line in lines[1:]:
-                    row = line.strip('\n').split('\t')
-                    
-                    # เติมข้อมูลให้ครบในกรณีที่บางแถวมีคอลัมน์ไม่เท่ากับหัวข้อ
+                    if not line.strip():
+                        continue
+                    row = line.strip().split('\t')
                     if len(row) < len(headers):
-                        row += [''] * (len(headers) - len(row))
-                        
+                        row.extend([''] * (len(headers) - len(row)))
+                    
                     row_dict = dict(zip(headers, row))
                     
-                    # ระบบตรวจสอบเงื่อนไขหลายคอลัมน์ (Multi-column filter)
-                    match = True
-                    if filters:
-                        for key, value in filters.items():
-                            # ถ้าระบุค่ามา และค่าที่ค้นหาไม่ได้อยู่ในข้อมูลคอลัมน์นั้น ให้ข้ามแถวนี้ไป
-                            if value and value.lower() not in row_dict.get(key, '').lower():
-                                match = False
-                                break
-                                
-                    if match:
+                    if search_query:
+                        search_lower = search_query.lower()
+                        if any(search_lower in str(val).lower() for val in row_dict.values()):
+                            data.append(row_dict)
+                    else:
                         data.append(row_dict)
-                        # จำกัดการแสดงผลเพื่อไม่ให้เบราว์เซอร์ค้างหากข้อมูลเยอะเกินไป
-                        if len(data) >= limit:
-                            break
     except Exception as e:
         print(f"Error reading file: {e}")
-    return headers, data
+    return data
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -57,7 +48,8 @@ def index():
             file.save(filepath)
             return redirect(url_for('index'))
     
-    files = os.listdir(app.config['UPLOAD_FOLDER'])
+    # อ่านไฟล์จาก /tmp/uploads
+    files = os.listdir(app.config['UPLOAD_FOLDER']) if os.path.exists(app.config['UPLOAD_FOLDER']) else []
     return render_template('index.html', files=files, edit_mode=False)
 
 @app.route('/edit/<filename>', methods=['GET', 'POST'])
@@ -70,8 +62,12 @@ def edit_file(filename):
             f.write(content)
         return redirect(url_for('index'))
     
-    with open(filepath, 'r', encoding='utf-8') as f:
-        content = f.read()
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except FileNotFoundError:
+        return redirect(url_for('index'))
+        
     files = os.listdir(app.config['UPLOAD_FOLDER'])
     return render_template('index.html', edit_mode=True, filename=filename, content=content, files=files)
 
@@ -82,21 +78,18 @@ def delete_file(filename):
         os.remove(filepath)
     return redirect(url_for('index'))
 
-@app.route('/dashboard/<filename>', methods=['GET'])
+@app.route('/dashboard/<filename>')
 def dashboard(filename):
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     
-    # ดึงค่าที่ผู้ใช้กรอกค้นหามาจาก URL Query String (เช่น ?Department=IT&Gender=M)
-    # ตัดเอาเฉพาะ field ที่ผู้ใช้พิมพ์ข้อมูลเข้ามา
-    filters = {k: v for k, v in request.args.items() if v.strip()}
+    if not os.path.exists(filepath):
+        return "ไม่พบไฟล์ (ไฟล์อาจถูกลบไปแล้วโดยระบบของ Vercel)", 404
+        
+    search_query = request.args.get('search', '').strip()
+    data = filter_data(filepath, search_query)
     
-    headers, data = filter_data(filepath, filters=filters, limit=200)
-    
-    return render_template('dashboard.html', 
-                           filename=filename, 
-                           headers=headers, 
-                           data=data, 
-                           current_filters=filters)
+    return render_template('dashboard.html', data=data, filename=filename, search_query=search_query)
 
+# จุดนี้สำคัญสำหรับ Vercel ต้องให้ตัวแปร app พร้อมถูกเรียกใช้งาน
 if __name__ == '__main__':
     app.run(debug=True)
