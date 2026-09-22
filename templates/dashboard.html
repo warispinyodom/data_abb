@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - {{ filename }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        /* สไตล์สำหรับตารางให้เลื่อนในแนวนอนได้ดีขึ้น */
+        .table-responsive { max-height: 70vh; }
+        thead th { position: sticky; top: 0; background-color: #343a40 !important; color: white; z-index: 1; }
+    </style>
+</head>
+<body class="bg-light">
+
+<div class="container-fluid py-4 px-4">
+    
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="fw-bold"><i class="bi bi-bar-chart-fill text-primary"></i> Dashboard: <span class="text-secondary">{{ filename }}</span></h3>
+        <a href="/" class="btn btn-outline-dark"><i class="bi bi-arrow-left"></i> กลับหน้าแรก</a>
+    </div>
+
+    {% if headers %}
+    <!-- ส่วนของระบบค้นหา / กรองข้อมูล (Multi-column Filter) -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white fw-bold">
+            <i class="bi bi-funnel-fill text-info"></i> ตัวกรองข้อมูล (รองรับการค้นหาหลายคอลัมน์พร้อมกัน)
+        </div>
+        <div class="card-body bg-white">
+            <form method="GET" action="/dashboard/{{ filename }}" class="row g-2 align-items-end">
+                <!-- วนลูปสร้าง Input Field ตามรายชื่อ Header ที่อ่านได้จากไฟล์ -->
+                {% for header in headers %}
+                <div class="col-md-2 col-sm-4">
+                    <label class="form-label small text-muted mb-1">{{ header }}</label>
+                    <input type="text" class="form-control form-control-sm" 
+                           name="{{ header }}" 
+                           placeholder="ค้นหา..." 
+                           value="{{ current_filters.get(header, '') }}">
+                </div>
+                {% endfor %}
+                
+                <div class="col-md-12 mt-3 text-end">
+                    <a href="/dashboard/{{ filename }}" class="btn btn-sm btn-secondary"><i class="bi bi-eraser"></i> ล้างค่าทั้งหมด</a>
+                    <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> กรองข้อมูล</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ส่วนแสดงตารางข้อมูล -->
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            {% if data %}
+            <div class="table-responsive">
+                <table class="table table-hover table-bordered table-sm mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            {% for header in headers %}
+                                <th>{{ header }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in data %}
+                            <tr>
+                                {% for header in headers %}
+                                    <!-- ใช้ dict.get() เผื่อกรณีแถวข้อมูลแหว่ง -->
+                                    <td>{{ row.get(header, '') }}</td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="p-3 text-muted small text-end bg-light border-top">
+                แสดงข้อมูล {{ data|length }} รายการ
+            </div>
+            {% else %}
+            <div class="p-5 text-center text-danger">
+                <i class="bi bi-exclamation-circle" style="font-size: 2rem;"></i>
+                <p class="mt-2">ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% else %}
+    <div class="alert alert-warning text-center mt-4">
+        <i class="bi bi-info-circle"></i> ไม่มีข้อมูลในไฟล์นี้ หรือรูปแบบไฟล์ไม่ถูกต้อง
+    </div>
+    {% endif %}
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
