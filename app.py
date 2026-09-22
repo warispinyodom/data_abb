@@ -1,50 +1,116 @@
 from flask import Flask, render_template, request, redirect, url_for
 import os
+from urllib.parse import unquote
 
 app = Flask(__name__)
 
-# โฟลเดอร์ uploads หลักใน Root Directory ของโปรเจกต์คุณ
-UPLOAD_FOLDER = os.path.join(app.root_path, 'uploads')
+# ใช้ Absolute Path ระบุตำแหน่งโฟลเดอร์ ป้องกันปัญหา Path คลาดเคลื่อนบน Serverless
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 TMP_FOLDER = '/tmp/uploads'
 
-# สร้างโฟลเดอร์ uploads ในเครื่องถ้ายังไม่มี
+# สร้างโฟลเดอร์ชั่วคราวเตรียมไว้สำหรับ Vercel
+os.makedirs(TMP_FOLDER, exist_ok=True)
 if not os.path.exists(UPLOAD_FOLDER):
     try:
-        os.makedirs(UPLOAD_FOLDER)
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     except OSError:
         pass
 
-def get_active_folder():
-    """เลือกโฟลเดอร์สำหรับเขียนไฟล์: ถ้าอยู่บน Vercel ให้ใช้ /tmp/uploads อัตโนมัติ"""
-    if os.environ.get('VERCEL'):
+def get_writable_folder():
+    """สลับตำแหน่งบันทึกไฟล์ไปที่ /tmp/uploads อัตโนมัติเมื่ออยู่บน Vercel"""
+    if os.environ.get('VERCEL') or not os.access(UPLOAD_FOLDER, os.W_OK):
         os.makedirs(TMP_FOLDER, exist_ok=True)
         return TMP_FOLDER
     
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     return UPLOAD_FOLDER
 
+def get_deleted_files():
+    """ดึงรายชื่อไฟล์ที่ถูกระบุสถานะลบ (สำหรับจัดการไฟล์ Read-only บน Vercel)"""
+    if not os.path.exists(TMP_FOLDER):
+        return set()
+    return {f[:-8] for f in os.listdir(TMP_FOLDER) if f.endswith('.deleted')}
+
+def mark_as_deleted(filename):
+    """ลบไฟล์จริง หรือสร้าง Marker file ใน /tmp หากเป็นไฟล์ระบบ Read-only บน Vercel"""
+    # 1. ลองลบใน /tmp
+    tmp_path = os.path.join(TMP_FOLDER, filename)
+    if os.path.exists(tmp_path):
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+    # 2. ลองลบใน /uploads (ถ้าอยู่บน Vercel จะลบไม่ได้เพราะเป็น Read-Only)
+    proj_path = os.path.join(UPLOAD_FOLDER, filename)
+    if os.path.exists(proj_path):
+        try:
+            os.remove(proj_path)
+        except OSError:
+            # หากระบบล็อกไม่ให้ลบไฟล์ ให้สร้างไฟล์ .deleted มาร์กไว้ว่าถูกลบแล้ว
+            marker_path = os.path.join(TMP_FOLDER, f"{filename}.deleted")
+            try:
+                with open(marker_path, 'w') as f:
+                    f.write('deleted')
+            except OSError:
+                pass
+
+def unmark_deleted(filename):
+    """ยกเลิกสถานะลบ (กรณีมีการอัปโหลดหรือเขียนไฟล์ชื่อเดิมทับ)"""
+    marker_path = os.path.join(TMP_FOLDER, f"{filename}.deleted")
+    if os.path.exists(marker_path):
+        try:
+            os.remove(marker_path)
+        except OSError:
+            pass
+
 def find_file(filename):
-    """หาตำแหน่งไฟล์ในระบบ"""
-    # เช็กใน /tmp ก่อน (ไฟล์อัปโหลดใหม่บน Vercel)
+    """ค้นหาตำแหน่งไฟล์ รองรับ URL Decoding (%20) และ Case Sensitivity บน Linux/Vercel"""
+    filename = unquote(filename)
+    deleted = get_deleted_files()
+    
+    if filename in deleted:
+        return None
+
+    # 1. ค้นหาใน /tmp/uploads ก่อน (สำหรับไฟล์อัปโหลดใหม่หรือไฟล์ที่แก้ไข)
     tmp_path = os.path.join(TMP_FOLDER, filename)
     if os.path.exists(tmp_path):
         return tmp_path
-    
-    # เช็กใน /uploads (ไฟล์ที่มีอยู่ในโปรเจกต์)
+
+    # 2. ค้นหาใน /uploads แบบตรงตัว
     proj_path = os.path.join(UPLOAD_FOLDER, filename)
     if os.path.exists(proj_path):
         return proj_path
-        
+
+    # 3. ค้นหาใน /uploads แบบไม่สนตัวพิมพ์เล็ก-ใหญ่ (สำหรับ Linux Server)
+    if os.path.exists(UPLOAD_FOLDER):
+        for f in os.listdir(UPLOAD_FOLDER):
+            if f.lower() == filename.lower() and f not in deleted:
+                return os.path.join(UPLOAD_FOLDER, f)
+
     return None
 
 def list_all_files():
-    """ดึงรายชื่อไฟล์ทั้งหมดจากทั้งโฟลเดอร์ uploads และพื้นที่ชั่วคราว"""
+    """ดึงรายชื่อไฟล์ทั้งหมดที่ยังไม่ถูกลบ"""
     files = set()
+    deleted = get_deleted_files()
+
     if os.path.exists(UPLOAD_FOLDER):
-        files.update(os.listdir(UPLOAD_FOLDER))
+        try:
+            files.update(os.listdir(UPLOAD_FOLDER))
+        except OSError:
+            pass
+
     if os.path.exists(TMP_FOLDER):
-        files.update(os.listdir(TMP_FOLDER))
-    return sorted(list(files))
+        try:
+            tmp_files = [f for f in os.listdir(TMP_FOLDER) if not f.endswith('.deleted')]
+            files.update(tmp_files)
+        except OSError:
+            pass
+
+    active_files = [f for f in files if f not in deleted]
+    return sorted(active_files)
 
 def filter_data(filepath, filters=None, limit=200):
     headers = []
@@ -83,8 +149,9 @@ def index():
             return redirect(request.url)
         file = request.files['file']
         if file.filename != '':
-            save_dir = get_active_folder()
+            save_dir = get_writable_folder()
             filepath = os.path.join(save_dir, file.filename)
+            unmark_deleted(file.filename)
             file.save(filepath)
             return redirect(url_for('index'))
     
@@ -93,12 +160,14 @@ def index():
 
 @app.route('/edit/<filename>', methods=['GET', 'POST'])
 def edit_file(filename):
+    filename = unquote(filename)
     filepath = find_file(filename)
     
     if request.method == 'POST':
         content = request.form['content']
-        save_dir = get_active_folder()
+        save_dir = get_writable_folder()
         save_path = os.path.join(save_dir, filename)
+        unmark_deleted(filename)
         with open(save_path, 'w', encoding='utf-8') as f:
             f.write(content)
         return redirect(url_for('index'))
@@ -114,18 +183,13 @@ def edit_file(filename):
 
 @app.route('/delete/<filename>')
 def delete_file(filename):
-    """สั่งลบไฟล์ทั้งในโฟลเดอร์ uploads และพื้นที่ชั่วคราว"""
-    for folder in [UPLOAD_FOLDER, TMP_FOLDER]:
-        path = os.path.join(folder, filename)
-        if os.path.exists(path):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
+    filename = unquote(filename)
+    mark_as_deleted(filename)
     return redirect(url_for('index'))
 
 @app.route('/dashboard/<filename>', methods=['GET'])
 def dashboard(filename):
+    filename = unquote(filename)
     filepath = find_file(filename)
     
     if not filepath:
